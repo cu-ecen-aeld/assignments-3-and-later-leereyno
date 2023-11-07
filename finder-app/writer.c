@@ -53,12 +53,6 @@ int main(int argc, char * argv[])
 	// Status variable to check that a flush to disk succeeds
 	int fsync_status = 0;
 
-	// Understanding program arguments:
-	//
-	// argv[0] is the path to the running program (e.g. ./writer )
-	// argv[1] is our first argument, the path to the file we will be creating
-	// argv[2] is the string we'll be writing into the file in argv[1]
-
 	// Make sure both of our command line arguments are specified
 	if ( argc != 3 )
 	{
@@ -66,15 +60,25 @@ int main(int argc, char * argv[])
 		return 1;
 	}
 
+	// Understanding program arguments:
+	//
+	// argv[0] is the path to the running program (e.g. ./writer )
+	// argv[1] is our first argument, the path to the file we will be creating
+	// argv[2] is the string we'll be writing into the file in argv[1]
+
+	// Create more descriptive aliases for our command line arguments
+	const char * filename = argv[1];
+	const char * stringout = argv[2];
+
 	// How long is the string we're writing out to our file?
-	string_length = strlen(argv[2]);
+	string_length = strlen(stringout);
 
 	// Open our file for writing:
 	//
 	// Per the instructions, we can assume that the directory where our file lives already exists
 	// so we can just open this file for writing:
 
-	fd = open( argv[1],
+	fd = open( filename,
 	           O_WRONLY | O_CREAT | O_TRUNC,
 	           S_IWUSR | S_IRUSR | S_IWGRP | S_IRGRP | S_IROTH
 	         );
@@ -94,32 +98,35 @@ int main(int argc, char * argv[])
 	//
 	// S_IROTH = Everyone else can read from file
 
-	localerrno = errno;  // Save errno since library calls might change its value
 
 	// Did something go wrong?
 	if ( fd == -1)
 	{
-		snprintf(logbuffer,BUFFERSIZE,"Error opening file \"%s\" : %s\n",argv[1],strerror(localerrno));
+		localerrno = errno;  // Save errno since library calls might change its value. Best practice
+		// populate logbuffer with an error message, send it to the log, and print it to the screen
+		//	
+		snprintf(logbuffer,BUFFERSIZE,"Error opening file \"%s\" : %s\n",filename,strerror(localerrno));
 		send_to_syslog(LOG_ERR,logbuffer);
 		printf("%s",logbuffer);
 		return 1;
 	}
 
-	snprintf(logbuffer,BUFFERSIZE,"Writing %s to %s",argv[2],argv[1]);
+	// Send a non-error message to our logfile saying that we're going to write to our output file
+	snprintf(logbuffer,BUFFERSIZE,"Writing %s to %s",stringout,filename);
 	send_to_syslog(LOG_DEBUG,logbuffer);
 
-	written = write ( fd, argv[2], string_length	);
+	// Write to our output file, and save how many bytes were actually written
+	written = write ( fd, stringout, string_length	);
 
-	localerrno = errno;  // Save errno since library calls might change its value
-
-	if ( written == -1 )
+	if ( written == -1 ) // Unable to write
 	{
-		snprintf(logbuffer,BUFFERSIZE,"Error writing to file \"%s\" : %s\n",argv[1],strerror(localerrno));
+		localerrno = errno;
+		snprintf(logbuffer,BUFFERSIZE,"Error writing to file \"%s\" : %s\n",filename,strerror(localerrno));
 		send_to_syslog(LOG_ERR,logbuffer);
 		printf("%s",logbuffer);
 		return 1;
 	}
-	else if ( written != string_length )
+	else if ( written != string_length ) // Could not write everything we wanted to
 	{
 		snprintf(logbuffer,BUFFERSIZE,"Only %ld bytes from string of %ld length written\n",(long int)written,(long int)string_length);
 		send_to_syslog(LOG_ERR,logbuffer);
@@ -130,21 +137,20 @@ int main(int argc, char * argv[])
 	// Flush buffers to disk
 	fsync_status = fsync ( fd );
 
-	localerrno = errno;  // Save errno since library calls might change its value
-
 	if ( fsync_status == -1 )
 	{
-		snprintf(logbuffer,BUFFERSIZE,"Error flushing file \"%s\" to disk : %s\n",argv[1],strerror(localerrno));
+		localerrno = errno;
+		snprintf(logbuffer,BUFFERSIZE,"Error flushing file \"%s\" to disk : %s\n",filename,strerror(localerrno));
 		send_to_syslog(LOG_ERR,logbuffer);
 		printf("%s",logbuffer);
 		return 1;
 	}
 
 	// Close our file
-	if ( close ( fd ) == -1)
+	if ( close ( fd ) == -1 )
 	{
 		localerrno = errno;
-		snprintf(logbuffer,BUFFERSIZE,"Error closing file \"%s\" : %s\n",argv[1],strerror(localerrno));
+		snprintf(logbuffer,BUFFERSIZE,"Error closing file \"%s\" : %s\n",filename,strerror(localerrno));
 		send_to_syslog(LOG_ERR,logbuffer);
 		printf("%s",logbuffer);
 		return 1;
