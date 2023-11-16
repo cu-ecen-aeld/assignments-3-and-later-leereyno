@@ -62,6 +62,27 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+	pid_t pid = fork();
+	pid_t waitforme;
+
+	if ( pid > 0 ) // parent
+	{
+		waitforme = wait ( NULL );
+
+		if ( waitforme == -1 )
+		{
+			perror("Unable to terminate...");
+			return -1;
+		}
+		
+	}
+	else if ( pid == 0 ) // child
+	{
+		execv(command[0],command)
+	}
+
+	
+
 
     va_end(args);
 
