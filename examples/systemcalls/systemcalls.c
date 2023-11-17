@@ -81,8 +81,6 @@ bool do_exec(int count, ...)
 		execv(command[0],command)
 	}
 
-	
-
 
     va_end(args);
 
