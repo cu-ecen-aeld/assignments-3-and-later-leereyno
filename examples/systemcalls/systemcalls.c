@@ -1,5 +1,10 @@
 #include "systemcalls.h"
 
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -47,6 +52,7 @@ bool do_exec(int count, ...)
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
+		  //fprintf(stderr,"command[%d] = %s\n",i,command[i]);
     }
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
@@ -62,23 +68,38 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+	int ret;
+	int status;
 	pid_t pid = fork();
 	pid_t waitforme;
 
 	if ( pid > 0 ) // parent
 	{
-		waitforme = wait ( NULL );
+		waitforme = wait ( &status );
 
 		if ( waitforme == -1 )
 		{
 			perror("Unable to terminate...");
-			return -1;
+			return false;
 		}
+
+		//fprintf(stderr,"Command return code = %d\n",WEXITSTATUS(status));
+
+		if ( WEXITSTATUS(status) != 0)
+			return false;
 		
 	}
 	else if ( pid == 0 ) // child
 	{
-		execv(command[0],command)
+		ret = execv(command[0],command);
+
+		//fprintf(stderr,"Ret = %d\n",ret);
+
+		if ( ret == -1)
+		{
+			perror("Unable to launch");
+			return false;
+		}
 	}
 
 
