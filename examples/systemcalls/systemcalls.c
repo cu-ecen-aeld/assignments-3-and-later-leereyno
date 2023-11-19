@@ -61,9 +61,8 @@ bool do_exec(int count, ...)
 			#endif
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-//    command[count] = command[count];
+
+    va_end(args);
 
 /*
  * TODO:
@@ -100,39 +99,42 @@ bool do_exec(int count, ...)
 			perror("parent : waitpid returned error");
 			return false;
 		}
-
-		#ifdef FORKDEBUG
-		fprintf(stderr,"parent : normal WIFEXITED return code = %d\n",WIFEXITED(status));
-		fprintf(stderr,"parent : normal WEXITSTATUS return code = %d\n",WEXITSTATUS(status));
-		#endif
-
-		if ( WIFEXITED(status) == 1)
+		else if (WIFEXITED(status)) // Did the process run exit() when terminating?
 		{
-			if ( WEXITSTATUS(status) != 0)
+			#ifdef FORKDEBUG
+			fprintf(stderr,"parent : normal WIFEXITED return code = %d\n",WIFEXITED(status));
+			fprintf(stderr,"parent : normal WEXITSTATUS return code = %d\n",WEXITSTATUS(status));
+			#endif
+
+			if ( WEXITSTATUS(status) == 0) // Did the process return 0 when exiting?
+				return true;
+			else
 				return false;
 		}
+		// If we don't know how the process ended then assume there was an error
 		else
 			return false;
 	}
 	else if ( pid == 0 ) // child
 	{
+
+		#ifdef FORKDEBUG
+		fprintf(stderr,"child : normal command_zero : %s\n",command[0]);
+		#endif
+
+		// Attempt to run our program
 		ret = execv(command[0],command);
 
-		if ( ret == -1)
+		if ( ret == -1) // Unable to exec new program
 		{
-			#ifdef FORKDEBUG
-			fprintf(stderr,"child : normal execv return value = %d\n",ret);
-			#endif
-
 			perror("Exec failure");
-			exit(1);
+			exit(1); // We must use exit(1) to pass this return code to waitpid() in parent
 		}
 
 	}
 
-	va_end(args);
+	return true; // Process should never reach this line, but this avoids compile error
 
-	return true;
 }
 
 /**
@@ -154,10 +156,8 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 		  #endif
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-//    command[count] = command[count];
 
+    va_end(args);
 
 /*
  * TODO
@@ -179,37 +179,39 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 	// Create a child of the current process
 	pid = fork();				
 
-	if ( pid > 0 ) // parent
+	if ( pid == -1 )
+	{
+		perror("do_exec failure to fork");
+		return false;
+	}
+	else if ( pid > 0 ) // parent
 	{
 		// Wait for the child process to exit and save its status information
-		waitforme = wait ( &status );
+		waitforme = waitpid ( pid, &status, 0 );
 		
 		if ( waitforme == -1 )
 		{
-		   #ifdef FORKDEBUG
-    		fprintf(stderr,"waitpid returned error at %s : function %s : line %d\n",__FILE__,__func__,__LINE__);
-			#endif
+			perror("parent : waitpid returned error");
 			return false;
 		}
-
-      #ifdef FORKDEBUG
-		fprintf(stderr,"redirect command return code = %d\n",WEXITSTATUS(status));
-      #endif
-
-		// Use the return value from the program launched in our child process to
-		// determine if there was an error in the child program
-		if ( WEXITSTATUS(status) != 0)
+		else if (WIFEXITED(status)) // Did the process run exit() when terminating?
 		{
-         #ifdef FORKDEBUG
-    		fprintf(stderr,"child process did not return clean at %s : function %s : line %d\n",__FILE__,__func__,__LINE__);
-         #endif
-			return false;
+			#ifdef FORKDEBUG
+			fprintf(stderr,"parent : normal WIFEXITED return code = %d\n",WIFEXITED(status));
+			fprintf(stderr,"parent : normal WEXITSTATUS return code = %d\n",WEXITSTATUS(status));
+			#endif
+
+			if ( WEXITSTATUS(status) == 0) // Did the process return 0 when exiting?
+				return true;
+			else
+				return false;
 		}
-		
+		// If we don't know how the process ended then assume there was an error
+		else
+			return false;
 	}
 	else if ( pid == 0 ) // child
 	{
-
 		// Open the file we'll be redirecting stdout to
 		outfilefd = open( outputfile,
 						O_WRONLY | O_CREAT | O_TRUNC,
@@ -236,23 +238,18 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 		}
 
 		#ifdef FORKDEBUG
-		fprintf(stderr,"redir command_zero : %s\n",command[0]);
+		fprintf(stderr,"child : redir command_zero : %s\n",command[0]);
 		#endif
 
+		// Attempt to run our program
 		ret = execv(command[0],command);
 
 		if ( ret == -1)
 		{
-			#ifdef FORKDEBUG
-			fprintf(stderr,"child : normal execv return value = %d\n",ret);
-			#endif
-
 			perror("redir Unable to launch");
 			exit(1);
 		}
 	}
 
-	va_end(args);
-
-	return true;
+	return true; // Process should never reach this line, but this avoids compile error
 }
